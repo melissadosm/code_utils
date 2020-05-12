@@ -1,0 +1,26 @@
+Hello! This is the documentation for Candidate Monetization Script
+
+1. Building script in Pyspark.
+2. Building .yalm script to set configuration to cluster in Kubernetes
+    * Setting paths to Cloud Storage or any storage to test
+3. Uploading .py files to storage (ex. Google Cloud Storage) to test code
+4. Running test code wit the following commands
+    * In Terminal go to folder with .yalm file and run
+Instanciar job:
+kubectl apply -f candidate_monetization_spark_app.yaml
+
+
+Matar job (importante para hacer re-runs):
+kubectl delete sparkapplication <NAME_OF_JOB_IN_YALM_FILE>
+
+
+Describir job:
+kubectl describe sparkapplication <NAME_OF_JOB_IN_YALM_FILE>
+
+
+Logs:
+kubectl logs <NAME_OF_JOB_IN_YALM_FILE>-driver
+
+5. When we are sure the script works as desired, we upload the job to folder in Github
+    * Job in Airflow will appear after 10 minutes
+    * Test this code

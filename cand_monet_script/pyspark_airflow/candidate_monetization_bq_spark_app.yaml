@@ -1,0 +1,133 @@
+apiVersion: "sparkoperator.k8s.io/v1beta2"
+kind: SparkApplication
+metadata:
+  # prod
+  name: "candidate-monetization-bq-{{ execution_date.strftime('%Y-%m-%d-%H%M') }}-{{ task_instance.try_number }}"
+  # local
+#  name: "candidate-monetization-bq-test"
+  namespace: default
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: "gcr.io/merlin-bus/spark-py-prometheus-gcs:2.4.5_48"
+  imagePullPolicy: Always
+  # prod
+  mainApplicationFile: "gs://airflow-dags-new/dags/dataflow_pipeline/dags/kubernetes/candidate_monetization_bq/main.py"
+  # local
+#  mainApplicationFile: "gs://merlin-datascience/melissa/candidate_monetization_bq/src/main.py"
+#   only for prod, important for airflow
+  arguments: [ "--path", "{{ params.path }}"]
+  sparkVersion: "2.4.5"
+  hadoopConf:
+    "fs.gs.project.id": merlin-pro
+    "fs.gs.impl": com.google.cloud.hadoop.fs.gcs.GoogleHadoopFileSystem
+    "fs.AbstractFileSystem.gs.impl": com.google.cloud.hadoop.fs.gcs.GoogleHadoopFS
+    "google.cloud.auth.service.account.enable": "true"
+    "google.cloud.auth.service.account.json.keyfile": /home/credentials/key.json
+  sparkConf:
+    "spark.jars.packages": "com.merlin.dataengineering.spark:spark-common_2.11:0.0.48,\
+    org.conscrypt:conscrypt-openjdk:2.2.1,org.apache.avro:avro:1.9.2,\
+    com.google.auto.value:auto-value-annotations:1.7"
+    "spark.driver.extraClassPath": "/opt/spark/jdbc/*"
+    "spark.executor.extraClassPath": "/opt/spark/jdbc/*"
+    "spark.jars.ivySettings": "/home/ivy.settings"
+    "spark.executor.userClassPathFirst": "true"
+    "spark.driver.userClassPathFirst": "true"
+    "spark.jars.excludes": "com.sun.jdmk:jmxtools,javax.jms:jms,com.sun.jmx:jmxri,\
+    org.apache.commons:commons-lang3,org.scala-lang:scala-reflect,\
+    org.scalanlp:breeze_2.11,org.apache.spark:spark-core_2.11,org.apache.spark:spark-hive_2.11,\
+    org.apache.spark:spark-sql_2.11,org.scala-lang:scala-library,org.apache.avro:avro,\
+    org.apache.hadoop:hadoop-client,log4j:log4j,org.slf4j:slf4j-api,org.slf4j:slf4j-log4j12,\
+    org.apache.hadoop:hadoop-common,org.apache.hadoop:hadoop-hdfs,com.sun.jersey:jersey-core,\
+    com.sun.jersey:jersey-json,org.apache.orc:orc-core,com.sun.xml.bind:jaxb-ri,\
+    com.google.auto.value:auto-value-annotations,com.esotericsoftware:kryo-shaded,\
+    com.fasterxml.jackson.core:jackson-core,com.fasterxml.jackson.core:jackson-databind,\
+    com.fasterxml.jackson.core:jackson-annotations,com.google.cloud.bigdataoss:gcs-connector,\
+    org.apache.hadoop:hadoop-mapreduce-client-core,commons-logging:commons-logging"
+
+  # Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps
+  deps:
+    pyFiles:
+      - "gs://airflow-dags-new/dags/dataflow_pipeline/dags/kubernetes/candidate_monetization_bq/extract.py"
+      - "gs://airflow-dags-new/dags/dataflow_pipeline/dags/kubernetes/candidate_monetization_bq/messages.py"
+      - "gs://airflow-dags-new/dags/dataflow_pipeline/dags/kubernetes/candidate_monetization_bq/preprocess.py"
+      - "gs://airflow-dags-new/dags/dataflow_pipeline/dags/kubernetes/candidate_monetization_bq/queries.py"
+
+  restartPolicy:
+    type: Never
+  volumes:
+  - name: bigquery-credentials
+    secret:
+      defaultMode: 420
+      secretName: bigquery-credentials-de
+  driver:
+    cores: 1
+    coreLimit: "1"
+    memory: "512m"
+    env:
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: "/home/credentials/key.json"
+    labels:
+      version: 2.4.5
+      app: spark-application
+      name: datastore-candidate
+    initContainers:
+    - name: metrics
+      command: ["sh", "-c", "echo 'port-hack'" ]
+      image: busybox
+      ports:
+      - containerPort: 8090
+        name: metrics
+    serviceAccount: spark-account
+    tolerations:
+      - effect: NoSchedule
+        key: dedicated
+        operator: Equal
+        value: "true"
+    nodeSelector:
+      dedicated: "true"
+    volumeMounts:
+    - mountPath: /home/credentials/key.json
+      name: bigquery-credentials
+      readOnly: true
+      subPath: dataengineer.json
+  executor:
+    cores: 1
+    instances: 1
+    memory: "1024m"
+    env:
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: "/home/credentials/key.json"
+    coreLimit: "1"
+    tolerations:
+      - effect: NoSchedule
+        key: dedicated
+        operator: Equal
+        value: "true"
+    nodeSelector:
+      dedicated: "true"
+    labels:
+      version: 2.4.5
+      app: spark-application
+      name: datastore-candidate
+    initContainers:
+    - name: metrics
+      command: ["sh", "-c", "echo 'port-hack'" ]
+      image: busybox
+      ports:
+      - containerPort: 8090
+        name: metrics
+    volumeMounts:
+    - mountPath: /home/credentials/key.json
+      name: bigquery-credentials
+      readOnly: true
+      subPath: dataengineer.json
+  monitoring:
+    exposeDriverMetrics: true
+    exposeExecutorMetrics: true
+    metricsPropertiesFile: "/etc/metrics/conf/metrics.properties"
+    prometheus:
+      configFile: "/etc/metrics/conf/prometheus.yaml"
+      jmxExporterJar: "/prometheus/jmx_prometheus_javaagent-0.11.0.jar"
+      port: 8090
