@@ -1,0 +1,33 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+# Load package
+library(networkD3)
+library(readr)
+
+# Load energy projection data
+df_links <- read_csv("sankey_links.csv")
+df_nodes <- read_csv("sankey_nodes.csv")
+
+ 
+# Now we have 2 data frames: a 'links' data frame with 3 columns (from, to, value), and a 'nodes' data frame that gives the name of each node.
+head(df_links)
+head(df_nodes)
+
+```
+
+
+
+```{r}
+ 
+# Thus we can plot it
+p <- sankeyNetwork(Links = df_links, Nodes = df_nodes, Source = "source",
+              Target = "target", Value = "value", NodeID = "name",
+              units = "TWh", fontSize = 14, nodeWidth = 30)
+p
+```
+
