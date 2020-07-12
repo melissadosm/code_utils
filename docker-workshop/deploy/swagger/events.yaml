@@ -1,0 +1,226 @@
+openapi: 3.0.0
+info:
+  title: Events micro-service
+  version: "1.0.0"
+  license:
+    name: Apache 2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+
+servers:
+  - url: 'https://qa.api.merlinjobs.com/events'
+  - url: 'https://api.merlinjobs.com/events'
+
+paths:
+  /health:
+    get:
+      operationId: api.events-sync.health
+      responses:
+        '200':
+          description: Module working
+  /v1/track:
+    post:
+      operationId: api.events.create.track
+      summary: Track events
+      description: >
+        This endpoint transform the sent events and sync them into the Merlin platform.
+        currently there are synced on a kafka topic
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              name: preferencesRequest
+              $ref: '#/components/schemas/EventRequest'
+      responses:
+        '200':
+          description: 'Preferences created/updated'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '500':
+          $ref: '#/components/responses/500'
+
+  /v1/legacy/track:
+    post:
+      operationId: api.events.create.legacy_track
+      summary: Track events
+      description: >
+        This endpoint transform the legacy event request and sync them into the Merlin platform.
+        currently there are synced on a kafka topic
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              name: preferencesRequest
+              $ref: '#/components/schemas/EventLegacyRequest'
+      responses:
+        '200':
+          description: 'Preferences created/updated'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '500':
+          $ref: '#/components/responses/500'
+
+components:
+  parameters:
+    platform:
+      in: header
+      name: platform
+      required: true
+      description: Platform sending the request.
+      schema:
+        type: string
+  responses:
+    '400':
+      description: 'Bad request, client error.'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    '401':
+      description: Invalid credentials.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    '500':
+      description: Internal server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+          description: 'Human-readable error explanation, if available.'
+        code:
+          type: integer
+          format: int32
+          description: 'Error code, usually equivalent to the HTTP status code.'
+        error:
+          type: string
+          description: 'Error codename, usually unique to an error category.'
+
+    EventRequest:
+      type: object
+      properties:
+        platform_info:
+          $ref: '#/components/schemas/PlatformInfo'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+        event_name:
+          type: string
+        id_user:
+          type: string
+        event_category:
+          type: string
+        user_role:
+          type: string
+        time_stamp:
+          type: integer
+          format: int64
+          description: Unix timestamp of the date in millis.
+        id_job:
+          type: string
+        screen_name:
+          type: string
+        properties:
+          type: string
+          additionalProperties:
+            type: string
+
+    PlatformInfo:
+      type: object
+      properties:
+        platform:
+          type: string
+        browser_type:
+          type: string
+        device_language:
+          type: string
+        device_type:
+          type: string
+        app_version:
+          type: string
+        callerFunctionName:
+          type: string
+    EventLegacyRequest:
+      type: object
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/EventLegacy'
+
+        platform:
+          type: string
+        browserType:
+          type: string
+        deviceLanguage:
+          type: string
+        deviceType:
+          type: string
+        appVersion:
+          type: string
+
+    EventLegacy:
+      type: object
+      properties:
+        idEvent:
+          type: string
+        eventName:
+          type: string
+        idUser:
+          type: string
+        platform:
+          type: string
+        idUserCandidate:
+          type: string
+        eventCategory:
+          type: string
+        userRole:
+          type: string
+        timeStamp:
+          type: integer
+          format: int64
+          description: Unix timestamp of the date in millis.
+        idJob:
+          type: string
+        idUserEmployer:
+          type: string
+        screenName:
+          type: string
+        callerFunctionName:
+          type: string
+        properties:
+          type: string
+          additionalProperties:
+            type: string
+
+  securitySchemes:
+    ApiKeyAuth:        # arbitrary name for the security scheme
+      type: apiKey
+      in: header       # can be "header", "query" or "cookie"
+      name: Api-Key
+      description: >-
+        API Key that only authorizes not registered users (also other ms) to the
+        specified endpoint.`

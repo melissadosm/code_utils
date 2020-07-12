@@ -1,0 +1,154 @@
+# deploy
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name:  $SERVICE_NAME
+  namespace: $NAMESPACE
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: $SERVICE_NAME
+    spec:
+      volumes:
+        - name: google-cloud-key
+          secret:
+            secretName: google-cloud-key
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: "app"
+                      operator: In
+                      values:
+                      - $SERVICE_NAME
+                topologyKey: "kubernetes.io/hostname"
+              weight: 30
+      containers:
+        - name: $SERVICE_NAME
+          image: gcr.io/${GOOGLE_PROJECT_ID}/$SERVICE_NAME:${CIRCLE_SHA1}
+          envFrom:
+            - configMapRef:
+                name: events-sync-config
+            - secretRef:
+                name: events-sync-api-key
+          volumeMounts:
+            - name: google-cloud-key
+              mountPath: /var/secrets/google
+          env:
+            - name: PROJECT_ID
+              value: "$GOOGLE_PROJECT_ID"
+            - name: GOOGLE_PROJECT_ID
+              value: "$GOOGLE_PROJECT_ID"
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/google/key.json
+            - name: KAFKA_SERVER_HOST
+              value: "$KAFKA_SERVER_HOST"
+            - name: SCHEMA_REGISTRY_SERVER_HOST
+              value: "$SCHEMA_REGISTRY_SERVER_HOST"
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /health
+              port: $PORT
+              scheme: HTTP
+            initialDelaySeconds: 3
+            periodSeconds: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          resources:
+            requests:
+              cpu: 200m
+              memory: 250Mi
+            limits:
+              cpu: 350m
+              memory: 500Mi
+          imagePullPolicy: Always
+          ports:
+            - containerPort: $PORT
+
+        - name: $SERVICE_NAME-queue
+          image: gcr.io/${GOOGLE_PROJECT_ID}/$SERVICE_NAME:${CIRCLE_SHA1}
+          envFrom:
+            - configMapRef:
+                name: events-sync-config
+          volumeMounts:
+            - name: google-cloud-key
+              mountPath: /var/secrets/google
+          command: ["./events_queuebin"]
+          env:
+            - name: PROJECT_ID
+              value: "$GOOGLE_PROJECT_ID"
+            - name: GOOGLE_PROJECT_ID
+              value: "$GOOGLE_PROJECT_ID"
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /var/secrets/google/key.json
+            - name: KAFKA_SERVER_HOST
+              value: "$KAFKA_SERVER_HOST"
+            - name: SCHEMA_REGISTRY_SERVER_HOST
+              value: "$SCHEMA_REGISTRY_SERVER_HOST"
+          resources:
+            requests:
+              cpu: 200m
+              memory: 250Mi
+            limits:
+              cpu: 350m
+              memory: 500Mi
+          imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: $SERVICE_NAME
+  namespace: $NAMESPACE
+spec:
+  ports:
+    - port: 443
+      name: https
+      targetPort: $PORT
+      protocol: TCP
+    - port: 80
+      targetPort: $PORT
+      protocol: TCP
+      name: http
+  selector:
+    app: $SERVICE_NAME
+
+---
+apiVersion: autoscaling/v2beta1
+kind: HorizontalPodAutoscaler
+metadata:
+  name: $SERVICE_NAME
+  namespace: $NAMESPACE
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: $SERVICE_NAME
+  minReplicas: $MIN_REPLICA
+  maxReplicas: $MAX_REPLICA
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        targetAverageUtilization: 50
+    - type: Resource
+      resource:
+        name: memory
+        targetAverageUtilization: 50
+
+---
+apiVersion: policy/v1beta1
+kind: PodDisruptionBudget
+metadata:
+  name: $SERVICE_NAME-pdb
+  namespace: $NAMESPACE
+spec:
+  minAvailable: $MIN_REPLICA
+  selector:
+    matchLabels:
+      app: $SERVICE_NAME

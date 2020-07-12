@@ -1,0 +1,4 @@
+Flask==1.0.2
+Flask-api==1.0.0
+flask_cors==3.0.6
+gunicorn
